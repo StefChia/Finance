@@ -5,16 +5,17 @@ import json
 
 from tracker import Tracker
 
-port = Tracker()
+trans = Tracker()
 
 while True:
-    port.trans_pull_from_database()
-    port.show_transactions_database()
+    trans.trans_pull_from_database()
+    trans.show_transactions_database()
     add = input('Do you want to buy/sell positions? (yes/no) ')
     if add.lower() == 'yes':
-        port.fill()
-        port.trans_write_on_disk()
+        trans.fill()
+        trans.trans_write_on_disk()
     else: 
         break
     
+#port.reinitiate_trans_database()
     

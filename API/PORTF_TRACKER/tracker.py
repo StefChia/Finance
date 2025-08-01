@@ -10,7 +10,7 @@ class Tracker:
     """Create a Portfolio Tracker Object"""
     def __init__(self):
         """Initialize the attributes"""
-        self.names = ['Asset name','ISIN', 'Initial price','Units','Current Price',]
+        self.names = ['Asset name','ISIN', 'Initial price','Units','Current Price']
         self.data = pd.DataFrame(columns = self.names)
         #self.data.columns = self.names
         self.trans_list = []
@@ -102,17 +102,116 @@ class Tracker:
     def reinitiate_trans_database(self):
         self.trans_list = []
         self.data = pd.DataFrame(self.trans_list)
+        self.trans_write_on_disk()
         
+    
+        #Show the current situation (updated prices and returns)
+    def update_prices(self):
+        """Update the Current price column"""
+        names = list(self.data['Asset name'])
+        updated_prices = []
+        for name in names:
+            #Get via API the Current Price
+            try:
+                url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
+                response = requests.get(url)
+            except ValueError:
+                print(f'For {name} is not possible to get an updated price.')
+                continue
+            else: 
+                print(f'Respnse status: {response.status_code}')
+                content = response.json()
+                updated_price = content[f'{name}']['usd'] 
+                updated_prices.append(updated_price)
+                
+        self.data['Current price'] = updated_prices
+    
+
+            
+            
+            
+            
+
+
+
+
+
+class Portfolio:
+    """Create a portfolio class."""
+    def __init__(self):
+        """Initialize the attributes."""
+    
+    #Manually Create a portfolio
+    def manually_create_ptf (self, save = True):
+        """Add positions."""
+        self.names = ['Asset name','ISIN', 'Initial price','Units','Current price',]
+        self.pos = []
         
+        while True:
+            name = input('Type the name of the asset: ').lower()
+            isin = input('Type the ISIN: ')
+            in_p = float(input('Type the initial price: '))
+            units = float(input('Type the units: '))
+            price = float(input('What is the price?'))
+            
+            values = [name,isin,in_p,units,price]
+            
+            #Store the operation in a Dictionary
+            dict_values = {}
+            for i,j in enumerate(self.names):
+                dict_values[j] =  values[i]
+                self.pos.append(dict_values)
+            
+            
+            #Store the operations in the dataframe
+            self.data = pd.DataFrame(self.pos)
+            self.uniq_asset_names = self.data['Asset name'].unique()
+            
+            print('\nNew position added.')
+            if save == True:
+                self.trans_write_on_disk()
+                print()
+            
+            #Check for more
+            go_on = input('You want to add another position? (yes/no) ')
+            if go_on.lower() == 'no':
+                if save == True:
+                    self.portf_write_on_disk()
+                    print('\nNew position saved on disk.')
+                    break
+            
+        
+    
+    
+    #Show the current situation (updated prices and returns)
+    def update_prices(self,database):
+        """Update the Current price column"""
+        names = list(database['Asset name'])
+        updated_prices = []
+        for name in names:
+            #Get via API the Current Price
+            try:
+                url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
+                response = requests.get(url)
+            except ValueError:
+                print(f'For {name} is not possible to get an updated price.')
+                continue
+            else: 
+                print(f'Respnse status: {response.status_code}')
+                content = response.json()
+                updated_price = content[f'{name}']['usd'] 
+                updated_prices.append(updated_price)
+                
+        database['Current price'] = updated_price
+    
+    
+    
+    
+    #From the transactions database create a portfolio
+    
     
     """def currrent_portfolio(self):
         Show the current portfolio.
         for i in self.uniq_asset_names:
             d = self.data[self.data['Asset name']== i]
             d = d.select_dtypes(include = 'number').sum()"""
-            
-            
-            
-            
-                
-
