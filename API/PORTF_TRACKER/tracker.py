@@ -17,7 +17,7 @@ class Tracker:
         self.uniq_asset_names = []
         
         self.portfolio_list = []
-        self.currrent_portfolio = pd.DataFrame(columns = self.names)
+        self.current_portfolio = pd.DataFrame()
     
     
     def fill(self, save = True):
@@ -98,9 +98,11 @@ class Tracker:
         else:
             self.trans_list = json.loads(content)
             self.data = pd.DataFrame(self.trans_list)
+            self.uniq_asset_names = self.data['Asset name'].unique()
     
     def reinitiate_trans_database(self):
         self.trans_list = []
+        self.uniq_asset_names = []
         self.data = pd.DataFrame(self.trans_list)
         self.trans_write_on_disk()
         
@@ -127,66 +129,40 @@ class Tracker:
         self.data['Current price'] = updated_prices
     
 
-            
-            
-            
-            
-
-
-
-
-
-class Portfolio:
-    """Create a portfolio class."""
-    def __init__(self):
-        """Initialize the attributes."""
-    
-    #Manually Create a portfolio
-    def manually_create_ptf (self, save = True):
-        """Add positions."""
-        self.names = ['Asset name','ISIN', 'Initial price','Units','Current price',]
-        self.pos = []
+    def download_excel(self,name='Transactions.xlsx'):
+        """Create an excel file of the dataframe in the current directory."""
+        self.data.to_excel(name)
         
-        while True:
-            name = input('Type the name of the asset: ').lower()
-            isin = input('Type the ISIN: ')
-            in_p = float(input('Type the initial price: '))
-            units = float(input('Type the units: '))
-            price = float(input('What is the price?'))
-            
-            values = [name,isin,in_p,units,price]
-            
-            #Store the operation in a Dictionary
-            dict_values = {}
-            for i,j in enumerate(self.names):
-                dict_values[j] =  values[i]
-                self.pos.append(dict_values)
-            
-            
-            #Store the operations in the dataframe
-            self.data = pd.DataFrame(self.pos)
-            self.uniq_asset_names = self.data['Asset name'].unique()
-            
-            print('\nNew position added.')
-            if save == True:
-                self.trans_write_on_disk()
-                print()
-            
-            #Check for more
-            go_on = input('You want to add another position? (yes/no) ')
-            if go_on.lower() == 'no':
-                if save == True:
-                    self.portf_write_on_disk()
-                    print('\nNew position saved on disk.')
-                    break
-            
+        
         
     
+    #PORTFOLIO PART
     
-    #Show the current situation (updated prices and returns)
-    def update_prices(self,database):
+    
+    def get_live_portfolio(self):
+        """Get the current portfolio at live prices."""
+        self.units_dict = {}
+        list_rows = [] 
+        for name in self.uniq_asset_names:
+            data = self.data[self.data['Asset name']== name]
+            units = data['Units'].sum()
+            weighted_price = data['Initial price']@ data['Units']/units
+            self.units_dict[name] = units
+            row = {
+            'Asset name': name,
+            'Units': units,
+            'Initial price': round(weighted_price, 2)
+            }
+            list_rows.append(row)
+        
+        #Store the portfolio in a Dataframe
+        self.current_portfolio = pd.DataFrame(list_rows)
+        self.update_prices_portf()
+        
+        
+    def update_prices_portf(self):
         """Update the Current price column"""
-        names = list(database['Asset name'])
+        names = self.uniq_asset_names
         updated_prices = []
         for name in names:
             #Get via API the Current Price
@@ -202,16 +178,12 @@ class Portfolio:
                 updated_price = content[f'{name}']['usd'] 
                 updated_prices.append(updated_price)
                 
-        database['Current price'] = updated_price
+        self.current_portfolio['Current price'] = updated_prices
     
     
-    
-    
-    #From the transactions database create a portfolio
-    
-    
-    """def currrent_portfolio(self):
-        Show the current portfolio.
-        for i in self.uniq_asset_names:
-            d = self.data[self.data['Asset name']== i]
-            d = d.select_dtypes(include = 'number').sum()"""
+    def show_current_portfolio(self):
+        print(self.current_portfolio)
+            
+            
+            
+

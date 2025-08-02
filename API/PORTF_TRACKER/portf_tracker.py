@@ -16,6 +16,10 @@ while True:
         trans.trans_write_on_disk()
     else: 
         break
-    
+
+trans.trans_pull_from_database()
+trans.get_live_portfolio()
+trans.show_current_portfolio()
+
 #port.reinitiate_trans_database()
     
