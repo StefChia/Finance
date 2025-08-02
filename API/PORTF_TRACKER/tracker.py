@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import json
 from pathlib import Path
+from datetime import datetime
 
 
 class Tracker:
@@ -129,7 +130,7 @@ class Tracker:
         self.data['Current price'] = updated_prices
     
 
-    def download_excel(self,name='Transactions.xlsx'):
+    def download_trans_excel(self,name='Transactions.xlsx'):
         """Create an excel file of the dataframe in the current directory."""
         self.data.to_excel(name)
         
@@ -182,7 +183,15 @@ class Tracker:
     
     
     def show_current_portfolio(self):
+        date = datetime.now()
+        print(f'This is the portfolio at {date} time.')
         print(self.current_portfolio)
+        
+    def download_port_excel(self):
+        """Create an excel file of the dataframe in the current directory."""
+        date = datetime.now()
+        name=f'Portfolio at {date}.xlsx'
+        self.current_portfolio.to_excel(name)
             
             
             
