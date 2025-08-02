@@ -180,7 +180,13 @@ class Tracker:
                 updated_prices.append(updated_price)
                 
         self.current_portfolio['Current price'] = updated_prices
-    
+
+        
+        #HERE ADD RETURNS...
+        
+        
+        
+        
     
     def show_current_portfolio(self):
         date = datetime.now()
