@@ -71,14 +71,6 @@ gg.sampling(10000)
 gg.show_samples()
 
 
-
-
-"""for i in range(num):
-            choice = random.choice(self.states)
-            if choice == 'a':
-                self.samples.append(np.random.normal(self.parameters['a'][0],self.parameters['a'][1]))
-            else:
-                self.samples.append(np.random.normal(self.parameters['b'][0],self.parameters['b'][1]))"""
                 
 
 """EQUIVALENT WAY
