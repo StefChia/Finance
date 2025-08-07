@@ -7,6 +7,8 @@ from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import plotly.io as pio
+pio.renderers.default = "browser"
 
 
 
@@ -259,12 +261,60 @@ class Tracker:
         print(f'\nThis is the portfolio at {date} time.\nThe value of the portfolio is: {round(self.total_portf_value,2)} $')
         print(f'\n{self.current_portfolio}')
         
-        #Make a better graph here
+        
+        # Create the table
+        
+        # Optional: format common numeric columns if they exist
+        currency_cols = [c for c in self.current_portfolio.columns if c.lower() in {"price", "initial price", "current price", "exposure"}]
+        pct_cols = [c for c in self.current_portfolio.columns if "percent" in c.lower() or c.endswith("(%)")]
+
+        # Build per-column format/prefix/suffix lists matching df columns
+        formats = []
+        prefixes = []
+        suffixes = []
+        for col in self.current_portfolio.columns:
+            if col in currency_cols:
+                formats.append(",.2f"); prefixes.append("$"); suffixes.append("")
+            elif col in pct_cols:
+                formats.append(",.2f"); prefixes.append(""); suffixes.append("%")
+            else:
+                formats.append(None); prefixes.append(""); suffixes.append("")
+        
+        fig = go.Figure(data=[go.Table(
+        columnorder=list(range(1, len(self.current_portfolio.columns) + 1)),
+        columnwidth=[max(80, min(220, len(str(col))*10)) for col in self.current_portfolio.columns],
+        header=dict(
+            values=list(self.current_portfolio.columns),
+            align="left",
+            fill_color="#C8D4E3",
+            font=dict(size=12, color="#2a3f5f")
+        ),
+        cells=dict(
+            values=[self.current_portfolio[c].tolist() for c in self.current_portfolio.columns],
+            align="left",
+            fill_color="#EBF0F8",
+            format=formats,
+            prefix=prefixes,
+            suffix=suffixes
+        ))])
+
+        fig.update_layout(
+            title=f"Portfolio as of {datetime.now()} — Total value: ${self.total_portf_value:,.2f}",
+            margin=dict(l=10, r=10, t=60, b=10))
+
+        return fig.show()
         
         
-        """plt.pie(self.current_portfolio['Exposure (%)'], labels= self.current_portfolio['Asset name'], autopct='%1.1f%%', colors=['gold', 'lightblue', 'pink'])
-        plt.title("Current portfolio weights.")
-        plt.show()"""
+        """# Matplotlib pie chart
+    plt.figure(figsize=(5, 5))
+    plt.pie(
+        self.current_portfolio['Exposure (%)'],
+        labels=self.current_portfolio['Asset name'],
+        autopct='%1.1f%%',
+        colors=['gold', 'lightblue', 'pink']
+    )
+    plt.title("Current portfolio weights")
+    plt.show()"""
         
     def download_port_excel(self):
         """Create an excel file of the dataframe in the current directory."""
