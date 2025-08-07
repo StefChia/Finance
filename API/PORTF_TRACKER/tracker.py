@@ -5,20 +5,27 @@ import numpy as np
 import json
 from pathlib import Path
 from datetime import datetime
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
 
 
 class Tracker:
     """Create a Portfolio Tracker Object"""
     def __init__(self):
         """Initialize the attributes"""
-        self.names = ['Asset name','ISIN', 'Initial price','Units','Current Price']
+        self.names = ['Asset name','ISIN','Macro-class','Initial price','Units','Current Price']
         self.data = pd.DataFrame(columns = self.names)
         #self.data.columns = self.names
         self.trans_list = []
         self.uniq_asset_names = []
         
+        self.tickers = {}
+        self.macro_class = {}
+        
         self.portfolio_list = []
         self.current_portfolio = pd.DataFrame()
+        self.total_portf_value = ""
     
     
     def fill(self, save = True):
@@ -26,24 +33,29 @@ class Tracker:
         
         while True:
             name = input('Type the name of the asset: ').lower()
-            isin = input('Type the ISIN: ')
+            
+            macro_class = input('Type of asset (crypto/stock): ')
+            
+            if macro_class.lower() == 'crypto':
+                isin = input('Type the ISIN or n/a: ')
+                curr_p = self._get_price_crypto(name)
+            else:
+                isin = input('Type the ISIN or n/a: ')
+                if isin == 'n/a':
+                    isin = self._search_ISIN(name)
+                    curr_p = self._get_price(isin.upper(),name)
+                else:
+                    curr_p = self._get_price(isin.upper(),name)
+                    isin = self._search_ISIN(name)
+                
+            self.macro_class[name]= macro_class.lower()
+            self.tickers[name] = isin.upper()
+                
             in_p = float(input('Type the initial price: '))
             units = float(input('Type the units: '))
             
             
-            #Get via API the Current Price
-            try:
-                url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
-                response = requests.get(url)
-            except ValueError:
-                print(f'{name} is not a valid crypto.')
-            else: 
-                print(f'Respnse status: {response.status_code}')
-                content = response.json()
-                curr_p = content[f'{name}']['usd']
-            
-            
-            values = [name,isin,in_p,units,curr_p]
+            values = [name, isin, macro_class, in_p, units,curr_p]
             
             #Store the operation in a Dictionary
             dict_values = {}
@@ -70,8 +82,6 @@ class Tracker:
                     break
             
             
-            
-    
     def show_all_transactions(self):
         """Show all transactions previously defined."""
         print('These are the positions taken so far:')
@@ -81,12 +91,21 @@ class Tracker:
                 print(f'The {j} is: {k}')
                 
     def show_transactions_database(self):
-        print(self.data)
+        if self.data.empty:
+            print('The transaction database is empty.')
+        else:
+            print(self.data)
+        
+        """fig, ax = plt.subplots()
+        ax.plot(self.data)
+        plt.show()"""
         
     def trans_write_on_disk(self,title='trans_database.json'):
         """Write and save or update the Database of the transactions"""
         path = Path(title)
-        path.write_text(json.dumps(self.trans_list))
+        path.write_text(json.dumps([self.trans_list,self.macro_class,self.tickers]))
+        
+        
         
     def trans_pull_from_database(self, title='trans_database.json'):
         """Pull from the local transactions database."""
@@ -96,38 +115,72 @@ class Tracker:
         except FileNotFoundError: 
             print('Database do not exist. One has been initiated now.')
             self.trans_write_on_disk()
+        
         else:
-            self.trans_list = json.loads(content)
-            self.data = pd.DataFrame(self.trans_list)
-            self.uniq_asset_names = self.data['Asset name'].unique()
+            list_of_dict = json.loads(content)
+            self.trans_list = list_of_dict[0]
+            if not self.trans_list:
+                print('The Database is empty. You have to add transactions.')
+                self.fill()
+            else:
+                self.data = pd.DataFrame(self.trans_list)
+                self.uniq_asset_names = self.data['Asset name'].unique()
+                self.macro_class = list_of_dict[1]
+                self.tickers = list_of_dict[2]
+
+        self.data['Current price'] = self._update_trans_prices(self.data)      
+            
+                
     
     def reinitiate_trans_database(self):
         self.trans_list = []
         self.uniq_asset_names = []
         self.data = pd.DataFrame(self.trans_list)
+        self.current_portfolio = pd.DataFrame()
+        self.total_portf_value = ""
+        self.trans_list = []
+        self.uniq_asset_names = []
+        self.tickers = {}
+        self.macro_class = {}
         self.trans_write_on_disk()
         
     
-        #Show the current situation (updated prices and returns)
-    def update_prices(self):
-        """Update the Current price column"""
+    #Show the current situation (updated prices and returns)
+    def _update_trans_prices(self,data):
+        """"Update the Current price column"""
+        macro_class = list(self.macro_class.values())
+        tickers = list(self.tickers.values())
         names = list(self.data['Asset name'])
         updated_prices = []
-        for name in names:
+        for i in range(len(data)):
+            
+            name = names[i]
+            macro = macro_class[i]
+            ticker = tickers[i]
+            
             #Get via API the Current Price
-            try:
-                url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
-                response = requests.get(url)
-            except ValueError:
-                print(f'For {name} is not possible to get an updated price.')
-                continue
-            else: 
-                print(f'Respnse status: {response.status_code}')
-                content = response.json()
-                updated_price = content[f'{name}']['usd'] 
-                updated_prices.append(updated_price)
+            if macro == 'crypto':
                 
-        self.data['Current price'] = updated_prices
+                try:
+                    url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
+                    response = requests.get(url)
+                except ValueError:
+                    print(f'For {name} is not possible to get an updated price.')
+                    continue
+                else: 
+                    #print(f'Response status: {response.status_code}')
+                    content = response.json()
+                    updated_price = content[f'{name}']['usd'] 
+                    updated_prices.append(updated_price)
+            
+            else:
+                ticker = self.tickers[name]
+                updated_price = self._get_price(ticker,name)
+                updated_prices.append(updated_price)
+        
+        return updated_prices
+                
+        
     
 
     def download_trans_excel(self,name='Transactions.xlsx'):
@@ -151,6 +204,7 @@ class Tracker:
             self.units_dict[name] = units
             row = {
             'Asset name': name,
+            'Macro-class': self.macro_class[name],
             'Units': units,
             'Initial price': round(weighted_price, 2)
             }
@@ -161,22 +215,30 @@ class Tracker:
         self.update_prices_portf()
         
         
+        
     def update_prices_portf(self):
         """Update the Current price column"""
         names = self.uniq_asset_names
         updated_prices = []
         for name in names:
             #Get via API the Current Price
-            try:
-                url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
-                response = requests.get(url)
-            except ValueError:
-                print(f'For {name} is not possible to get an updated price.')
-                continue
-            else: 
-                print(f'Respnse status: {response.status_code}')
-                content = response.json()
-                updated_price = content[f'{name}']['usd'] 
+            if self.macro_class[name] == 'crypto':
+                
+                try:
+                    url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
+                    response = requests.get(url)
+                except ValueError:
+                    print(f'For {name} is not possible to get an updated price.')
+                    continue
+                else: 
+                    #print(f'Response status: {response.status_code}')
+                    content = response.json()
+                    updated_price = content[f'{name}']['usd'] 
+                    updated_prices.append(updated_price)
+            
+            else:
+                ticker = self.tickers[name]
+                updated_price = self._get_price(ticker,name)
                 updated_prices.append(updated_price)
                 
         self.current_portfolio['Current price'] = updated_prices
@@ -184,14 +246,25 @@ class Tracker:
         
         #HERE ADD RETURNS...
         
+        self.current_portfolio['Return (%)'] = round(100*((self.current_portfolio['Current price']/self.current_portfolio['Initial price']) - 1),2) 
+        self.current_portfolio['Exposure'] = self.current_portfolio['Current price']*self.current_portfolio['Units']
+        self.total_portf_value = self.current_portfolio['Exposure'].sum()
+        self.current_portfolio['Exposure (%)'] = round((self.current_portfolio['Exposure']/self.total_portf_value * 100),2)
         
         
         
     
     def show_current_portfolio(self):
         date = datetime.now()
-        print(f'This is the portfolio at {date} time.')
-        print(self.current_portfolio)
+        print(f'\nThis is the portfolio at {date} time.\nThe value of the portfolio is: {round(self.total_portf_value,2)} $')
+        print(f'\n{self.current_portfolio}')
+        
+        #Make a better graph here
+        
+        
+        """plt.pie(self.current_portfolio['Exposure (%)'], labels= self.current_portfolio['Asset name'], autopct='%1.1f%%', colors=['gold', 'lightblue', 'pink'])
+        plt.title("Current portfolio weights.")
+        plt.show()"""
         
     def download_port_excel(self):
         """Create an excel file of the dataframe in the current directory."""
@@ -202,3 +275,69 @@ class Tracker:
             
             
 
+    def _search_ISIN(self,string):
+        """Search the ISIN and return it given a string."""
+        string = string
+        
+        url = 'https://yahoo-finance15.p.rapidapi.com/api/v1/markets/search'
+        querystring = {"search":string}
+        headers = {
+            "x-rapidapi-key": "6487ea259dmsh1cf031f35e0b4e1p17e5a5jsn1a70867302f5",
+            "x-rapidapi-host": "yahoo-finance15.p.rapidapi.com"
+        }
+        
+        response = requests.get(url,headers=headers,params=querystring)
+        content = response.json()
+        return content['body'][0]['symbol']
+    
+    
+    def _get_price_crypto(self,name):
+        """Get the price via API"""
+        name = name
+        #Get via API the Current Price
+        try:
+            url = f'https://api.coingecko.com/api/v3/simple/price?ids={name}&vs_currencies=usd'
+            response = requests.get(url)
+        except ValueError:
+            print(f'{name} is not a valid crypto.')
+        else:
+            """if response.status_code == 200:
+                print('Name successfully found.')"""
+                
+            #print(f'Response status: {response.status_code}')
+            content = response.json()
+            curr_p = content[f'{name}']['usd']
+            return curr_p
+        
+    
+    def _get_price(self,ticker,name=''):
+        """Get the price via API"""
+        ticker = ticker
+        if ticker == '':
+            name = name
+            ticker = self._search_ISIN(name)
+        
+        
+        #Get via API the Current Price
+        url = "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/quote"
+
+        querystring = {"ticker":ticker,"type":"STOCKS"}
+
+        headers = {
+            "x-rapidapi-key": "6487ea259dmsh1cf031f35e0b4e1p17e5a5jsn1a70867302f5",
+            "x-rapidapi-host": "yahoo-finance15.p.rapidapi.com"
+        }
+        try:
+            response = requests.get(url, headers=headers, params=querystring)
+        except ValueError:
+            new_ticker = self._search_ISIN(name)
+            print(f'{ticker} is not a valid ticker. We have used {new_ticker}')
+            self._get_price(new_ticker)
+        else:
+            """if response.status_code == 200:
+                print(f'{name} Price successfully found.')"""
+            content = response.json()
+            curr_p = content['body']['primaryData']['lastSalePrice']
+            return float(curr_p[1:])
+        
+    
