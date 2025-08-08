@@ -46,58 +46,6 @@ def compute_returns(prices):
     return data.dropna()
 
 
-"""def compute_prices_paths(returns):
-    Show prices paths.
-    dates = list(returns.index)
-    tickers = returns.columns
-    
-    data = pd.DataFrame()
-    for ticker in tickers:
-        p = 100
-        pr = []
-        for i in returns[ticker]:
-            p = p * np.exp(i)
-            pr.append(p)
-        data[ticker] = pr
-    
-    return data
-        
-    fig, ax = plt.subplots()
-    for ticker in tickers:
-        #Random colors
-        col = tuple([round(x, 1) for x in np.random.uniform(0, 1, 3)])
-        ax.plot(dates, data[ticker],color =col)
-    ax.set_title('Price paths of assets.')
-    ax.set_xlabel('Dates')
-    ax.set_ylabel('Prices')
-    
-    plt.show()"""
-    
-    
-   
-    
-"""def compute_prices_paths(returns,p_0 = 100):
-    Show prices paths.
-    tickers = returns.columns
-    data = pd.DataFrame()
-    data.index = returns.index
-    
-    for ticker in tickers:
-        p = p_0
-        pr = []
-        for i in returns[ticker]:
-            p *= np.exp(i)
-            pr.append(p)
-        data[ticker] = pr
-    return data"""
-
-
-
-
-
-
-
-
 
 def compute_sample_statistics(returns,prices):
     """Compute sample mean, sample variance and sd, correlation matrix and drawdowns.
