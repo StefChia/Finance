@@ -24,6 +24,7 @@ class Tracker:
         
         self.tickers = {}
         self.macro_class = {}
+        #self.name_dates = {}
         
         self.portfolio_list = []
         self.current_portfolio = pd.DataFrame()
@@ -304,22 +305,22 @@ class Tracker:
 
         return fig.show()
         
-        
-        """# Matplotlib pie chart
-    plt.figure(figsize=(5, 5))
-    plt.pie(
-        self.current_portfolio['Exposure (%)'],
-        labels=self.current_portfolio['Asset name'],
-        autopct='%1.1f%%',
-        colors=['gold', 'lightblue', 'pink']
-    )
-    plt.title("Current portfolio weights")
-    plt.show()"""
+        """
+        #Matplotlib pie chart
+        plt.figure(figsize=(5, 5))
+        plt.pie(
+            self.current_portfolio['Exposure (%)'],
+            labels=self.current_portfolio['Asset name'],
+            autopct='%1.1f%%',
+            colors=['gold', 'lightblue', 'pink']
+            )
+        plt.title("Current portfolio weights")
+        plt.show()"""
         
     def download_port_excel(self):
         """Create an excel file of the dataframe in the current directory."""
-        date = datetime.now()
-        name=f'Portfolio at {date}.xlsx'
+        #date = datetime.today()
+        name=f'Portfolio.xlsx'
         self.current_portfolio.to_excel(name)
             
             
