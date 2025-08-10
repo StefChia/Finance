@@ -7,7 +7,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import yfinance as yf
 
-from downòoader_returns import compute_returns
+from framework import compute_log_returns
 
 path = Path('/Users/stefanochiapparini/Desktop/PYTHON/Finance/API/SENTIMENT_ANALYSIS/google_searches_dataset.json')
 data = json.loads(path.read_text())
@@ -38,33 +38,57 @@ df.index = pd.to_datetime(df.index, format= '%Y-%m-%d')"""
 
 
 #UPLOAD RETURNS
-df = pd.read_csv('returns_dataset.csv')
+df = pd.read_csv('pv_dataset.csv')
 p_v = df[['Close','Volume']]
 p_v.index = df['Date']
 
 
-returns = compute_returns(p_v)
+returns = compute_log_returns(p_v)
 returns.columns = ['Ret','Vol_Ret']
 
 daily = p_v.copy()
 values = df2['Ethereum'].copy()
 daily['sent']= values.iloc[1:].values
 daily = pd.concat([daily,returns],axis=1)
-print(daily.corr())
+#print(daily.corr())
 
+
+#Create DATASET FOR MODEL1: SIMPLE h-step-ahead linear regression
+
+h = 1 #step ahead
 day = daily[['sent','Ret','Vol_Ret']]
-day['sent'] = day['sent'].shift(1)
-day['Vol_Ret'] = day['Vol_Ret'].shift(1)
+day['sent'] = day['sent'].shift(h)
+day['Vol_Ret'] = day['Vol_Ret'].shift(h)
 
 day = day.dropna()
 
 print(day.corr())
 
-"""fig, ax = plt.subplots()
+fig, ax = plt.subplots()
 ax.plot(day['Vol_Ret'])
-plt.show()"""
+plt.show()
 
-day.to_csv('dataset.csv')
+day.to_csv('dataset_model1.csv')
 
 
+
+#Create a dataset for MODEL2
+
+h = 1 #step ahead
+
+day = daily[['sent','Ret']].copy()
+day['sent'] = day['sent'].shift(h)
+day = day.dropna()
+
+day['sent1']= day['sent']-day['sent'].shift(1)
+day = day.dropna()
+
+#flag
+day['flag'] = np.where(day['sent1'] > 0, 1, -1)
+
+#FEATURES engineering
+day['sent2']= np.where(day['flag']==1, day['sent1']**2,0)
+day['sent3']= np.where(day['flag']==-1, day['sent1']**2,0)
+
+day.to_csv('dataset_model2.csv')
 

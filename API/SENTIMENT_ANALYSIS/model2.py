@@ -11,10 +11,10 @@ from sklearn.metrics import r2_score
 import statsmodels.api as sm
 
 
-data = pd.read_csv('dataset_model1.csv')
+data = pd.read_csv('dataset_model2.csv')
 
 # Features + constant
-X = sm.add_constant(data[['sent', 'Vol_Ret']] )
+X = sm.add_constant(data[['sent1','sent2','sent3']] )
 y = data['Ret']  
 
 # Fit OLS model
