@@ -26,7 +26,7 @@ means = pd.DataFrame({'5y':df1.mean(),'3m':df2.mean(),'7d':df3.mean(),'1d':df4.m
 
 
 
-#DOWNLOAD RETURNS
+"""#DOWNLOAD RETURNS
 # Example: Ethereum Classic in USD
 ticker = "ETH-USD"
 asset = yf.Ticker(ticker)
@@ -34,9 +34,13 @@ asset = yf.Ticker(ticker)
 # Fetch weekly historical data
 df = asset.history(period="3mo", interval="1d")  # last 1 year, weekly
 p_v = df[['Close','Volume']]
-df.index = pd.to_datetime(df.index, format= '%Y-%m-%d')
+df.index = pd.to_datetime(df.index, format= '%Y-%m-%d')"""
 
-#print(len(df2.index),len(p_v.index))
+
+#UPLOAD RETURNS
+df = pd.read_csv('returns_dataset.csv')
+p_v = df[['Close','Volume']]
+p_v.index = df['Date']
 
 
 returns = compute_returns(p_v)
