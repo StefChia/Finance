@@ -79,3 +79,43 @@ def download_returns(tickers):
     prices = download_historical_prices(tickers)
     return compute_log_returns(prices)
     
+def compute_prices_paths(returns,p_0 = 100):
+    """Show prices paths."""
+    tickers = returns.columns
+    data = pd.DataFrame()
+    data.index = returns.index
+    
+    for ticker in tickers:
+        p = p_0
+        pr = []
+        for i in returns[ticker]:
+            p *= np.exp(i)
+            pr.append(p)
+        data[ticker] = pr
+    return data
+
+
+
+
+#TRADING STRATEGIES
+
+def trade_up_down(p,ret,transaction_costs=0.0020,up_thresh=0.6,low_thresh=0.4,plot=None):
+    """Given an array of probabilities of up, it gives you the trading signals."""
+    #SET TRADING STRATEGY
+
+    signals = np.zeros_like(p, dtype=int)  # default 0
+    signals[p > up_thresh] = 1
+    signals[p < low_thresh] = -1
+
+    values = ret*signals
+    #transaction_costs = 0.002
+    values[values!=0] -= transaction_costs 
+
+    trading_ret = pd.DataFrame(values, index= data.index,columns=['Ret'])
+    prices = compute_prices_paths(trading_ret)
+
+    if plot is not None:
+        fig, ax = plt.subplots()
+        ax.plot(data.index,prices)
+        plt.show()
+    return signals,trading_ret,prices
