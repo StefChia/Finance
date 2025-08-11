@@ -6,7 +6,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import yfinance as yf
 
-from sklearn.linear_model import LinearRegression
+
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
 
@@ -14,7 +14,7 @@ import statsmodels.api as sm
 data = pd.read_csv('dataset_model1.csv')
 
 # Features + constant
-X = sm.add_constant(data[['sent', 'Vol_Ret']] )
+X = sm.add_constant(data[['sent', 'Vol_Ret']])
 y = data['Ret']  
 
 # Fit OLS model
