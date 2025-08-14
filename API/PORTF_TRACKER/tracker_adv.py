@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import numpy as np
 import json
+import yfinance as yf
 from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -10,23 +11,24 @@ import plotly.graph_objects as go
 import plotly.io as pio
 pio.renderers.default = "browser"
 
+from var_compute import VAR
+
 
 
 class Tracker:
     """Create a Portfolio Tracker Object"""
     def __init__(self):
         """Initialize the attributes"""
+        
         self.names = ['Dates','Asset name','TICKER','Macro-class','Initial price','Units','Current Price']
         self.data = pd.DataFrame(columns = self.names)
         
-        #self.data.columns = self.names
         self.trans_list = []
         self.uniq_asset_names = []
         self.dates = []
         
         self.tickers = {}
         self.macro_class = {}
-        #self.name_dates = {}
         
         self.portfolio_list = []
         self.current_portfolio = pd.DataFrame()
@@ -108,14 +110,14 @@ class Tracker:
         ax.plot(self.data)
         plt.show()"""
         
-    def trans_write_on_disk(self,title='trans_database.json'):
+    def trans_write_on_disk(self,title='trans_database_adv.json'):
         """Write and save or update the Database of the transactions"""
         path = Path(title)
         path.write_text(json.dumps([self.trans_list,self.macro_class,self.tickers,self.dates]))
         
         
         
-    def trans_pull_from_database(self, title='trans_database.json'):
+    def trans_pull_from_database(self, title='trans_database_adv.json'):
         """Pull from the local transactions database."""
         path = Path(title)
         try:
@@ -145,7 +147,7 @@ class Tracker:
         
         self.trans_list = []
         self.uniq_asset_names = []
-        self.data = pd.DataFrame(columns = self.names)
+        self.data = pd.DataFrame(columns=self.names)
         self.current_portfolio = pd.DataFrame()
         self.total_portf_value = ""
         self.dates = []
@@ -154,7 +156,7 @@ class Tracker:
         self.trans_write_on_disk()
         
     
-    #Show the current situation (updated prices and returns)
+    
     def _update_trans_prices(self,data):
         """"Update the Current price column"""
         names = list(self.data['Asset name'])
@@ -201,7 +203,6 @@ class Tracker:
     
     #PORTFOLIO PART
     
-    
     def get_live_portfolio(self):
         """Get the current portfolio at live prices."""
         self.units_dict = {}
@@ -209,9 +210,14 @@ class Tracker:
         for name in self.uniq_asset_names:
             data = self.data[self.data['Asset name']== name]
             units = data['Units'].sum()
-            weighted_price = data['Initial price']@ data['Units']/units
+            try:
+                weighted_price = data['Initial price']@ data['Units']/units
+            except ZeroDivisionError:
+                weighted_price = 0.0
+            last_date = data['Dates'].iloc[-1]
             self.units_dict[name] = units
             row = {
+            'Date':last_date,
             'Asset name': name,
             'Macro-class': self.macro_class[name],
             'Units': units,
@@ -253,13 +259,12 @@ class Tracker:
         self.current_portfolio['Current price'] = updated_prices
 
         
-        #HERE ADD RETURNS...
+        #HERE RETURNS:
         
         self.current_portfolio['Return (%)'] = round(100*((self.current_portfolio['Current price']/self.current_portfolio['Initial price']) - 1),2) 
         self.current_portfolio['Exposure'] = self.current_portfolio['Current price']*self.current_portfolio['Units']
         self.total_portf_value = self.current_portfolio['Exposure'].sum()
         self.current_portfolio['Exposure (%)'] = round((self.current_portfolio['Exposure']/self.total_portf_value * 100),2)
-        
         
         
     
@@ -328,9 +333,7 @@ class Tracker:
         #date = datetime.today()
         name=f'Portfolio.xlsx'
         self.current_portfolio.to_excel(name)
-            
-            
-            
+              
 
     def _search_ISIN(self,string):
         """Search the ISIN and return it given a string."""
@@ -370,7 +373,6 @@ class Tracker:
     def _get_price(self,ticker,name=''):
         """Get the price via API"""
         if ticker == '':
-            name = name
             ticker = self._search_ISIN(name)
         
         
@@ -397,3 +399,64 @@ class Tracker:
             return float(curr_p[1:])
         
     
+    
+    
+    
+    #ADD VAR ANALYTICS
+    def compute_var(self,h =22):
+        """Create a VAR instance and compute the VAR.
+        h is the target horizon."""
+        tickers = self.uniq_asset_names
+        
+        w = np.array([0.5,0.5])
+        data = pd.DataFrame()
+    
+        def download_historical_prices(tickers):
+            tickers = tickers
+            """Download historical prices from YF returns the dataframe of returns"""
+            start_date = datetime.datetime(2015,7,31)
+            #end_date = datetime.datetime(2025,7,31)
+            for ticker in tickers:
+                try:
+                    stock = yf.Ticker(ticker)
+                except:
+                    print(f'{ticker} not found.')
+                    continue
+                else:
+                    data[ticker] = stock.history(start=start_date)['Close']
+            
+            data.index = pd.to_datetime(data.index)
+            data.index = data.index.tz_localize(None).date
+            return data
+            
+        def compute_returns(prices):
+            """Returns the dataframe of returns."""
+            prices = prices
+            tickers = prices.columns
+            data = pd.DataFrame(index=prices.index)
+            
+            for ticker in tickers:
+                data[ticker]= (prices[ticker]/prices[ticker].shift(1)) -1
+
+            return data.dropna()
+
+    
+        #DOWNLOAD THE DATA
+        prices = download_historical_prices(tickers=tickers)
+        #show_prices_paths(prices)
+        returns = compute_returns(prices=prices)
+
+
+        #CREATE AN INSTANCE OF THE MODEL
+        instance = VAR(returns,w)
+        #EWMA
+        VARCOV = instance.compute_ewma()
+        print(VARCOV)
+        #VAR
+        self.MC_VAR = instance.get_VAR_MonteCarlo(h=h)
+        print(self.MC_VAR)
+        self.param_VAR = instance.get_VAR_Parametric(h=h)
+        print(self.param_VAR)
+        self.hist_VAR = instance.get_VAR_historical(h=h)
+        print(self.hist_VAR)
+        

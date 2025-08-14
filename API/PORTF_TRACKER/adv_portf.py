@@ -8,9 +8,11 @@ import plotly.graph_objects as go
 import plotly.io as pio
 pio.renderers.default = "browser"
 import plotly.express as px
+from pathlib import Path
+import json
 
 
-tickers = ['AAPL','META']
+tickers = ['SPY','QQQ']
 data = pd.DataFrame()
         
     
@@ -76,16 +78,6 @@ def compute_sample_statistics(returns,prices):
     return basic_stats,basic_stats_annaulized,corr_matrix
     
     
-            
-            
-def find_recovery_index(list,value):
-    """Find the first time the price recover, if it does, and return the index and the recovery status"""
-    for j, v in enumerate(list):
-        if v >= value:
-            return j, 1
-    return None, 0
-    
- 
     
 
 
@@ -135,6 +127,15 @@ def compute_drawdown_minimal(prices: pd.DataFrame, ticker: str):
             rec_gl = rec
 
     return [glob_max, index_pair, dat, rec_gl]
+
+
+
+def find_recovery_index(list,value):
+    """Find the first time the price recover, if it does, and return the index and the recovery status"""
+    for j, v in enumerate(list):
+        if v >= value:
+            return j, 1
+    return None, 0
      
     
 def show_df_html(df):
@@ -185,7 +186,12 @@ def show_corr_matrix(corr_matrix):
     
 
 
-def compute_portf_returns(returns, weights = None):
+
+
+
+
+
+def compute_portf_returns_const_weights(returns, weights = None):
     """Follow the portfolio weights path."""
     data = pd.DataFrame()
     data.index = returns.index
@@ -200,6 +206,18 @@ def compute_portf_returns(returns, weights = None):
         w = np.array(weights)
     
     data['Portf']= returns @ w
+    
+    return data
+
+def compute_portf_returns_changing_weights(returns, weights):
+    """Follow the portfolio weights path."""
+    data = pd.DataFrame()
+    data.index = returns.index
+    
+    N = len(data.index)
+    M = len(returns.columns)
+    
+    data['Portf']= (returns * weights).sum(axis=1)
     
     return data
 
@@ -269,14 +287,110 @@ print(basic_stats_annaulized_df)
 show_df_html(basic_stats_annaulized_df)
 show_corr_matrix(corr_matrix)
 """
-#COMPUTE PORTFOLIO RETURNS
-port_returns = compute_portf_returns(returns)
+
+
+"""#PORTFOLIO RETURNS FOR MULTIPLE ASSETS
+#COMPUTE PORTFOLIO RETURNS for static weights
+port_returns = compute_portf_returns_const_weights(returns)
 port_prices = compute_prices_paths(port_returns)
 show_prices_paths(port_prices)
+
 
 #ASSESS PORTFOLIO RETURNS
 port_basic_stats,port_basic_stats_annaulized,port_corr_matrix =compute_sample_statistics(port_returns,port_prices)
 port_basic_stats_df = pd.DataFrame(port_basic_stats)
 port_basic_stats_annaulized_df = pd.DataFrame(port_basic_stats_annaulized)
-#print(port_basic_stats_annaulized_df)
+print(port_basic_stats_annaulized_df)
+#show_df_html(port_basic_stats_annaulized_df)"""
+
+
+
+"""
+
+#COMPARING MULTIPLE PORTFOLIOS/BENCHMARK
+
+
+weigths_a = [1 for i in range(len(returns))]
+weigths_b = [0 for i in range(len(returns))]
+
+weights = pd.DataFrame(index=returns.index)
+weights[tickers[0]] = weigths_a
+weights[tickers[1]] = weigths_b
+
+
+
+weigths_a_2 = [0.5 for i in range(len(returns))]
+weigths_b_2 = [0.5 for i in range(len(returns))]
+
+weights_2 = pd.DataFrame(index=returns.index)
+weights_2[tickers[0]] = weigths_a_2
+weights_2[tickers[1]] = weigths_b_2
+
+
+
+#port_returns = compute_portf_returns_const_weights(returns)
+port_ret = pd.DataFrame(index=returns.index)
+port_ret['Wei_1']= compute_portf_returns_changing_weights(returns,weights)
+port_ret['Wei_2'] = compute_portf_returns_changing_weights(returns,weights_2)
+
+port_prices = compute_prices_paths(port_ret)
+show_prices_paths(port_prices)
+
+#ASSESS PORTFOLIO RETURNS
+port_basic_stats,port_basic_stats_annaulized,port_corr_matrix =compute_sample_statistics(port_ret,port_prices)
+port_basic_stats_df = pd.DataFrame(port_basic_stats)
+port_basic_stats_annaulized_df = pd.DataFrame(port_basic_stats_annaulized)
+print(port_basic_stats_annaulized_df)
 #show_df_html(port_basic_stats_annaulized_df)
+"""
+
+"""
+#GET THE HISTORIC WEIGHTS
+
+dates_tran = {'2017-08-10':[0.5,0.5],'2019-08-12':[0.,0.],'2023-07-28':[1.,0.]}
+
+returns.index = pd.to_datetime(returns.index)  # ensure datetime
+date_index = returns.index.strftime('%Y-%m-%d')  # formatted display
+
+#print(type(returns.index[0]))
+#print(returns.loc['2015-08-03'])
+
+change = []
+curr_w = [0,0]
+ws = []
+for date in date_index:
+    for d,ww in dates_tran.items():
+        if date == d:
+            curr_w = ww
+    ws.append(curr_w)
+
+#print(ws)
+ws = np.array(ws)
+
+weights = pd.DataFrame(ws, index = returns.index, columns=tickers)
+
+#print(weights)
+
+port_ret = pd.DataFrame(index=returns.index)
+port_ret['Portf']= compute_portf_returns_changing_weights(returns,weights)
+
+print(port_ret)
+port_prices = compute_prices_paths(port_ret)
+show_prices_paths(port_prices)
+
+
+
+#ASSESS PORTFOLIO RETURNS
+port_basic_stats,port_basic_stats_annaulized,port_corr_matrix =compute_sample_statistics(port_ret,port_prices)
+port_basic_stats_df = pd.DataFrame(port_basic_stats)
+port_basic_stats_annaulized_df = pd.DataFrame(port_basic_stats_annaulized)
+print(port_basic_stats_annaulized_df)
+#show_df_html(port_basic_stats_annaulized_df)
+"""
+
+
+
+
+
+ 
+ 
