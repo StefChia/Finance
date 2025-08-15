@@ -202,6 +202,13 @@ def alt_corr_1(series1,series2,cap=2):
 
 
 
+
+
+
+
+
+
+
 #TRADING STRATEGIES
 
 def trade_up_down(p,ret,transaction_costs=0.0020,up_thresh=0.6,low_thresh=0.4,plot=None):

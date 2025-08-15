@@ -24,3 +24,11 @@ Extremes are more reliably opposite than mid-range ⇒ the **extreme-weighted** 
 
 
 
+
+TO DO:
+-Fare strategia daily in-out
+-Bayesian linear regression
+-Per kalman filter la strategy hold è da modificare perchè il cointegrating vector cambia tra qundo sei entrato e quando sei uscito.
+
+
+
