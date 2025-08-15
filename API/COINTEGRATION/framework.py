@@ -97,6 +97,111 @@ def compute_prices_paths(returns,p_0 = 100):
 
 
 
+
+
+
+
+#TAILORED METRICS
+
+def autocorrelation_at_lags(vector,h=1):
+    """Show the autocorrelation at lags up to h.
+    It's an hand-made grid-search."""
+    for i in range(1,h+1):
+        vector = np.copy(vector)
+        res = np.copy(vector)
+        for j in range(i):
+            res = np.insert(res,0,0)[:-1] 
+        vector_diff_h = vector-res 
+        vector_diff_h = vector_diff_h[1:]
+        
+        corr = np.corrcoef(vector,res)
+        print(f"Lag-{i} autocorrelation: {corr[0][1]}")
+
+        
+
+def bipolar_correlation(series1,series2,thresh=0):
+    """Compute bipolar metric. 
+    Basically it's a measure of movements from threshold of the same sign."""
+    l = len(series1)
+    series1 = np.array(series1)
+    series2 = np.array(series2)
+    
+    series1 -= thresh
+    series2 -= thresh
+    
+    series1[series1>0] = 1
+    series1[series1<0] = -1
+    series1[series1==0] = 0
+    
+    series2[series2>0] = 1
+    series2[series2<0] = -1
+    series2[series2==0] = 0
+    
+    bipolar = (series1 @ series2)/(l)
+    #print(f'Bipolar metric: {bipolar}')
+    return bipolar
+
+def bipolar_autocorrelation(series,h=1,thresh=0):
+    """Compute bipolar autocorrelation at lag h."""
+    value = bipolar_correlation(series[h:],series[:-h],thresh)
+    return value
+
+
+
+
+
+
+def alt_corr_1(series1,series2,cap=2):
+    """In short is an autocorrelation decomposition in middies and extreme values.
+    A sign-concordance metric but up-weighting extremes via a cos **2 transform of each series’ z-score strandardization."""
+    
+    series1 = np.array(series1)
+    series2 = np.array(series2)
+    
+    m1 = np.mean(series1)
+    m2 = np.mean(series2)
+    
+    s1 = np.std(series1)
+    s2 = np.std(series2)
+    
+    
+    #SCALE in pi
+    #weights for middle values
+    vet1 = np.cos((np.clip((series1-m1)/s1,-cap,+cap)/(2*cap)) * np.pi)**2
+    vet2 = np.cos((np.clip((series2-m2)/s2,-cap,+cap)/(2*cap)) * np.pi)**2
+    #weights for extreme values
+    vet1_2 = np.sin((np.clip((series1-m1)/s1,-cap,+cap)/(2*cap)) * np.pi)**2
+    vet2_2 = np.sin((np.clip((series2-m2)/s2,-cap,+cap)/(2*cap)) * np.pi)**2
+    
+    series1[series1>0] = 1
+    series1[series1<0] = -1
+    series1[series1==0] = 0
+    
+    series2[series2>0] = 1
+    series2[series2<0] = -1
+    series2[series2==0] = 0
+    
+    v1 = vet1 * series1 
+    v2 = vet2 * series2
+    
+    v1_2 = vet1_2 * series1 
+    v2_2 = vet2_2 * series2 
+    
+    bipolar_mid = v1 @ v2 / (np.abs(v1) @ np.abs(v2)+1e-12)
+    bipolar_ex = v1_2 @ v2_2 / (np.abs(v1_2) @ np.abs(v2_2)+1e-12)
+    #print(f'Bipolar metric: {bipolar}')
+    return bipolar_mid, bipolar_ex
+
+
+
+
+
+
+
+
+
+
+
 #TRADING STRATEGIES
 
 def trade_up_down(p,ret,transaction_costs=0.0020,up_thresh=0.6,low_thresh=0.4,plot=None):
