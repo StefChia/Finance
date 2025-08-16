@@ -14,7 +14,7 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.ar_model import AutoReg
 from pykalman import KalmanFilter  # install pykalman
 
-from framework import download_historical_prices, compute_returns, cointegration_hold, autocorrelation_at_lags, bipolar_correlation, bipolar_autocorrelation, alt_corr_1
+from framework import download_historical_prices, compute_returns, cointegration_hold, autocorrelation_at_lags, bipolar_correlation, bipolar_autocorrelation, alt_corr_1, cointegration_daily
 def plot_res(res,index=None):
     "Plot residuals"
     fig,ax = plt.subplots()
@@ -38,6 +38,7 @@ ret = compute_returns(prices)
 
 
 l = int(len(ret) * 0.75)
+index_test = prices.index[l:]
 
 #print(prices)
 #print(ret)
@@ -64,7 +65,7 @@ Z = np.column_stack([np.ones(T), x]).reshape(T, 1, 2)  # (T,1,2)
 
 # 3) State-space: [alpha_t, beta_t]' is a random walk
 n_state = 2
-Q = 1e-9 * np.eye(n_state)           # state noise (tune or learn via EM)   #IMPORTANTE:QUESTO è fondamentale, più è alto più il modello corregge velocemnte.
+Q = 1e-8 * np.eye(n_state)           # state noise (tune or learn via EM)   #IMPORTANTE:QUESTO è fondamentale, più è alto più il modello corregge velocemnte.
 R = np.array([[1e-3]])               # obs noise  (tune or learn via EM)
 
 kf = KalmanFilter(
@@ -150,15 +151,15 @@ print(autocorr_trade)
 #ALTERNATIVE METRICS
 bipolar_trade = bipolar_correlation(resid_t[:-1],resid_t_diff)
 print(bipolar_trade)
-b,c = alt_corr_1(resid_t[:-1],resid_t_diff)
+b,c = alt_corr_1(resid_t[:-1],resid_t_diff,0.5)
 print(b)
 print(c)
-
+"""
 
 #TRADING
 #HOLDING STRATEGY
-res_mean = np.mean(res_tr)
-res_sd = np.std(res_tr)
+res_mean = np.mean(res_tr[-500:])
+res_sd = np.std(res_tr[-500:])
 
 up = res_mean +  1 * res_sd
 down = res_mean -  1 * res_sd
@@ -166,7 +167,7 @@ down = res_mean -  1 * res_sd
 up_clos = res_mean + 0.3 * res_sd
 down_clos = res_mean - 0.3 * res_sd
 
-res = pd.DataFrame(resid_t, columns=['COINT'])
+res = pd.DataFrame(resid_t,index = index_test, columns=['COINT'])
 
 d = cointegration_hold(res,res.index,down,up,down_clos,up_clos)
 
@@ -185,3 +186,17 @@ plt.show()
 
 needed = prices @ position
 print(needed)
+"""
+
+
+
+#EVERYDAY-STRATEGY
+res_mean = np.mean(res_tr[-500:])
+res_sd = np.std(res_tr[-500:])
+
+up = res_mean +  0.5 * res_sd
+down = res_mean -  0.5 * res_sd
+
+res = pd.DataFrame(resid_t,index = index_test, columns=['COINT'])
+
+d = cointegration_daily(res,res.index,down,up)

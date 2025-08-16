@@ -14,7 +14,8 @@ from sklearn.metrics import r2_score
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.ar_model import AutoReg
 
-from framework import download_historical_prices, compute_returns, cointegration_hold, autocorrelation_at_lags, bipolar_correlation, bipolar_autocorrelation, alt_corr_1
+from framework import download_historical_prices, compute_returns, cointegration_hold
+from framework import autocorrelation_at_lags, bipolar_correlation, bipolar_autocorrelation, alt_corr_1, cointegration_daily
 
 
 tickers = ['ETH-USD','SOL-USD']
@@ -24,6 +25,7 @@ ret = compute_returns(prices)
 
 
 l = int(len(ret) * 0.75)
+index_test = prices.index[l:]
 
 #print(prices)
 #print(ret)
@@ -123,7 +125,7 @@ print(c)
 
 
 
-"""
+
 
 #TEST Augmented-Dickey Fuller
 #RECALL: Null hypothesis (H₀): Residuals have a unit root (non-stationary).
@@ -148,6 +150,7 @@ r2 = r2_score(y_test, y_test)
 print(f'r2 OOS: {r2}')
 residuals_test = y_test - model.predict(x_test)
 
+"""
 #TRADING
 #HOLDING STRATEGY
 res_mean = np.mean(residuals)
@@ -162,10 +165,18 @@ down_clos = res_mean - 0.3 * res_sd
 res = pd.DataFrame(residuals_test, index=residuals_test.index, columns=['COINT'])
 
 d = cointegration_hold(res,res.index,down,up,down_clos,up_clos)
-
-#EVERYDAY-STRATEGY
-
 """
+#EVERYDAY-STRATEGY
+res_mean = np.mean(residuals)
+res_sd = np.std(residuals)
+
+up = res_mean + 1 * res_sd
+down = res_mean - 1 * res_sd
+
+res = pd.DataFrame(residuals_test, index=residuals_test.index, columns=['COINT'])
+
+d = cointegration_daily(res,res.index,down,up)
+
 
 
 """
@@ -207,89 +218,3 @@ print(res.summary())
 # Predictions
 preds = res.predict(start=0, end=10)
 print(preds)"""
-
-
-
-
-#Try TV-model (Kalman Filter)
-
-import numpy as np
-from pykalman import KalmanFilter  # install pykalman
-
-x = np.asarray(X); y = np.asarray(y)
-Z = np.c_[np.ones_like(x), x]      # observation design for [alpha_t, beta_t]
-n = 2                              # state dim
-
-# Observation y_t = Z_t @ state_t + eps
-# State random walk: state_t = state_{t-1} + w_t
-kf = KalmanFilter(
-    transition_matrices=np.eye(n),
-    observation_matrices=Z[:, None, :],  # time-varying design
-    transition_covariance=1e-6 * np.eye(n),  # Q (tune; controls drift)
-    observation_covariance=1e-3,            # R (tune/estimate)
-    initial_state_mean=np.zeros(n),
-    initial_state_covariance=1e3 * np.eye(n),
-)
-
-state_means, state_covs = kf.filter(y)
-alpha_t = state_means[:,0]
-beta_t  = state_means[:,1]
-resid_t = y - (alpha_t + beta_t * x)        # time-varying spread for signals
-
-
-
-
-autocorr = check_autocorr(resid_t)
-#print(autocorr)
-
-#ALTERNATIVE METRICS
-bipolar = bipolar_autocorrelation(resid_t)
-print(bipolar)
-b,c = alt_corr_1(resid_t[1:],resid_t[:-1])
-print(b)
-print(c)
-
-
-
-resid_t_diff = np.diff(resid_t)
-plot_res(resid_t_diff)
-autocorr_diff = check_autocorr(resid_t_diff)
-#print(autocorr_diff)
-
-#ALTERNATIVE METRICS
-bipolar_diff = bipolar_autocorrelation(resid_t_diff)
-print(bipolar_diff)
-b,c = alt_corr_1(resid_t_diff[1:],resid_t_diff[:-1])
-print(b)
-print(c)
-
-
-#TEST FOR TRADING POTENTIAL ASSESSMENT (c<b)
-print('trade')
-
-autocorr_trade = np.corrcoef(resid_t[:-1],resid_t_diff)[0][1]
-print(autocorr_trade)
-
-#ALTERNATIVE METRICS
-bipolar_trade = bipolar_correlation(resid_t[:-1],resid_t_diff)
-print(bipolar_trade)
-b,c = alt_corr_1(resid_t[:-1],resid_t_diff)
-print(b)
-print(c)
-
-
-
-
-
-"""
-
-#TEST Augmented-Dickey Fuller
-#RECALL: Null hypothesis (H₀): Residuals have a unit root (non-stationary).
-adf_result = adfuller(resid_t)
-
-# 5. Show results
-print("ADF Statistic:", adf_result[0])
-print("p-value:", adf_result[1])
-print("Critical Values:", adf_result[4])
-
-"""

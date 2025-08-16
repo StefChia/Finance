@@ -330,8 +330,8 @@ def threshold_buy_sell(ticker,prices,low_thresh,high_thresh,budget=None,tr_cost=
 
 
 
-#simple threshold-based trading simulation, testing a buy–sell rule.
-def cointegration_hold(residuals,index,low_thresh,high_thresh,low_clos=None,high_clos=None,budget=None,tr_cost=0.50, plot=True):
+
+def cointegration_hold(residuals,index,low_thresh,high_thresh,low_clos=None,high_clos=None,tr_cost=0.50, plot=True):
     """Simple threshold-based trading simulation, testing a buy–sell rule.
     Input is prices as dataframe.
     Returns dataframe with prices, trades, PNL, PNLcumsum."""
@@ -431,6 +431,81 @@ def cointegration_hold(residuals,index,low_thresh,high_thresh,low_clos=None,high
 
         ax1.scatter(data.index[m_in],  data.loc[m_in,  ticker], marker='^', color = 'orange', label='In',  s=100)
         ax1.scatter(data.index[m_out], data.loc[m_out, ticker], marker='v', color = 'blue', label='Out', s=100)
+        
+        
+
+        ax1.axhline(low_thresh, color='grey', linestyle='--', alpha=0.5)
+        ax1.axhline(high_thresh, color='grey', linestyle='--', alpha=0.5)
+        ax1.set_ylabel("Price (€)")
+        ax1.set_title(f"{ticker} Price & Trades")
+        ax1.legend()
+
+        # Cumulative PnL chart
+        ax2.plot(data.index, data['CumPNL'], color='purple', label='Cumulative PnL')
+        ax2.set_ylabel("Cumulative PnL (€)")
+        ax2.set_xlabel("Date")
+        ax2.legend()
+        ax2.grid(True)
+
+        plt.tight_layout()
+        plt.show()
+    
+    return data
+
+
+
+
+
+
+def cointegration_daily(residuals,index,low_thresh,high_thresh,tr_cost=0.50, plot=True):
+    """Simple threshold-based daily trading simulation. Daily trade the noise.
+    Returns dataframe with prices, trades, PNL, PNLcumsum."""
+    
+    ticker = 'COINT'
+    data = pd.DataFrame(residuals, index=index, columns=[ticker])
+    residuals = np.asarray(residuals, dtype=float).ravel()
+    res_diff = np.diff(residuals, prepend=0.0)  #one value shorter thus preprond parameter
+    
+    
+    in_out = [] 
+    for i in range(len(residuals)):
+        curr_e = residuals[i]
+        sign = - np.sign(curr_e)
+        if curr_e < high_thresh and curr_e > low_thresh:
+            sign = 0
+        in_out.append(sign)
+        
+    in_out = np.array(in_out)
+    in_out = np.roll(in_out, 1)
+    in_out[0] = 0
+    
+    trades = in_out * residuals
+    trades[trades!=0]-= tr_cost
+    pnl = res_diff * in_out
+    pnl[pnl!=0]-= 2 * tr_cost
+    check_pnl = np.sign(pnl)
+    
+    data['In-Out'] = in_out
+    data['Trades'] = trades
+    data['PNL'] = pnl
+    data['CumPNL'] = data['PNL'].cumsum()
+    data['ProfTrade'] = check_pnl
+    
+    
+    if plot is True:
+        # Create the plot
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+        # price
+        ax1.plot(data.index, residuals, label='Residuals')
+
+        # robust boolean masks via NumPy
+        m_sell  = (np.ravel(np.asarray(data['ProfTrade'])) == 1)
+        m_buy = (np.ravel(np.asarray(data['ProfTrade'])) == -1)
+
+
+        ax1.scatter(data.index[m_sell],  data.loc[m_sell,  ticker], marker='^', color = 'green', label='Profit trades',  s=40)
+        ax1.scatter(data.index[m_buy], data.loc[m_buy, ticker], marker='v', color = 'red', label='Loss trades', s=40)
         
         
 
