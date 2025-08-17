@@ -362,18 +362,26 @@ def launch_portf_opt_on_sample_test(exp_ret,varcov_for,returns):
 #PORTFOLIO OPTIMIZATION
 
 
-def portf_optim(ex_values,varcov,type='Both',value=1,long_only=True, integer=False, thres_weig=0.15, solver="OSQP", verbose=False):
-    """Given expected value and varcov.
-    Returns a vector of weights.
-    Type-target pair can be:
-    - 'Both' and number for risk aversion
-    - 'Target_m' exp ret and threshold
-    - 'Target_v' variance and threshold"""
-    
-    ex_values = np.asarray(ex_values, dtype=float)
+def portf_optim(ex_values,varcov,type='Both',value=1,long_only=True, thres_weig=0.15, solver="OSQP", verbose=False):
+    """
+    ex_values: length-n expected returns.
+    varcov: (n,n) covariance matrix.
+    type:
+      - 'Both'      -> mean-variance with risk aversion r = 1/value
+      - 'Target_m'  -> min variance s.t. w@m >= value
+      - 'Target_v'  -> max return   s.t. w' S w <= value
+    long_only: nonnegative weights if True.
+    integer:   make weights integer (see scale_int).
+    thres_weig: per-asset upper bound on weight.
+    solver: choose CVXPY solver; if None we pick based on `integer`.
+    eps_psd: floor for eigenvalues in PSD repair.
+    epsI: add epsI*I to covariance for conditioning.
+    scale_int: if not None and integer=True, solve in scaled integers.
+               Example: scale_int=100 -> weights are multiples of 1/100.
+    """
+    ex_values = np.asarray(ex_values, dtype=float).reshape(-1,1)
     varcov = np.asarray(varcov, dtype=float)
-    
-    n = len(ex_values)
+    n = ex_values.size
     
     #Check for PSD-veness of varcov
     def psd_jitter(S, eps=1e-8):
@@ -399,7 +407,7 @@ def portf_optim(ex_values,varcov,type='Both',value=1,long_only=True, integer=Fal
     
     #SET OBJECTIVE/DECISION VARIABLES
     # Choose domain: nonneg=True, integer=True,
-    w = cp.Variable(n, name='weights', nonneg=long_only, integer=integer)
+    w = cp.Variable(n, name='weights', nonneg=long_only)
     
     #SET CONSTRAINTS
     cons = []
