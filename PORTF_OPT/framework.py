@@ -9,9 +9,7 @@ pio.renderers.default = "browser"
 import plotly.express as px
 import cvxpy as cp
 
-
-tickers = ['AAPL','META']
-data = pd.DataFrame()
+from arch import arch_model
 
 
 """#Getting yf tickers via API
@@ -32,11 +30,13 @@ def get_yf_tickers(names):
         
     
 def download_historical_prices(tickers):
-    tickers = tickers
     """Download historical prices from YF returns the dataframe of returns"""
-    start_date = datetime.datetime(2022,7,31)
+    start_date = datetime.datetime(2018,7,31)
     #end_date = datetime.datetime(2025,7,31)
     #period="3mo", interval="1d"
+    
+    data = pd.DataFrame()
+    
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
@@ -52,33 +52,29 @@ def download_historical_prices(tickers):
 
     
             
-def compute_returns(prices):
-    """Returns the dataframe of returns."""
+def compute_returns(prices,log_ret=True):
+    """Returns the dataframe of returns.
+    You can choose if log or simple returns via log_ret = True/False
+    log_ret as default."""
     prices = prices
     tickers = prices.columns
     data = pd.DataFrame(index=prices.index)
     
-    for ticker in tickers:
-        data[ticker]= (prices[ticker]/prices[ticker].shift(1)) -1
+    if log_ret:
+        for ticker in tickers:
+            data[ticker]= np.log(prices[ticker]/prices[ticker].shift(1))
+    else:
+        for ticker in tickers:
+            data[ticker]= (prices[ticker]/prices[ticker].shift(1)) -1
 
     return data.dropna()
 
-def compute_log_returns(prices):
-    """Returns the dataframe of returns."""
-    prices = prices
-    tickers = prices.columns
-    data = pd.DataFrame(index=prices.index)
-    
-    for ticker in tickers:
-        data[ticker]= np.log(prices[ticker]/prices[ticker].shift(1))
-
-    return data.dropna()
 
 
 def download_returns(tickers):
     """Return the returns for the selected tickers."""
     prices = download_historical_prices(tickers)
-    return compute_log_returns(prices)
+    return compute_returns(prices)
     
 def compute_prices_paths(returns,log_ret=True, p_0 = 100):
     """Show prices paths.
@@ -100,107 +96,68 @@ def compute_prices_paths(returns,log_ret=True, p_0 = 100):
     return data
 
 
-def compute_drawdowns(prices, plot=False ):
-    """Compute the Time Series of drawdowns given prices.
-    Returns the TS of drawdowns and a list with the value of maximum drawdowns and the indexes to recover the window of that.
-    [peak_index, max_draw_index, recovery_index if there is]"""
-    
+
+
+def compute_drawdowns(prices, plot=False):
+    """
+    Compute the drawdowns from a numpy array of prices.
+    Args:
+        prices: np.ndarray of shape (T,)
+        plot: whether to plot drawdowns with markers
+    Returns:
+        drs: np.ndarray of drawdowns (<=0)
+        [max_drawdown, peak_idx, trough_idx, recovery_idx]
+    """
+
+    prices = np.asarray(prices, dtype=float).reshape(-1)
+
+    # running peak and drawdowns
     running_peak = np.maximum.accumulate(prices)
-    drs = prices / running_peak - 1.0  # <= 0
-    
+    drs = prices / running_peak - 1.0  # always <= 0
+
+    # trough and max drawdown
     trough_idx = int(np.argmin(drs))
     max_drawdown = float(drs[trough_idx])
-    
+
+    # peak index: last time running_peak == peak_value before trough
     peak_value = running_peak[trough_idx]
-    peak_idx = int(np.argmax(prices[:trough_idx + 1] == peak_value))
-    
+    peak_candidates = np.where(running_peak[:trough_idx+1] == peak_value)[0]
+    peak_idx = int(peak_candidates[0]) if peak_candidates.size > 0 else None
+
+    # recovery: first time prices get back to peak_value after trough
     recovery_idx = None
     if trough_idx + 1 < len(prices):
-        rec_candidates = np.where(prices[trough_idx + 1:] >= peak_value)[0]
+        rec_candidates = np.where(prices[trough_idx+1:] >= peak_value)[0]
         if rec_candidates.size > 0:
             recovery_idx = int(trough_idx + 1 + rec_candidates[0])
-        
-
-    def plot_drawdown_with_markers(drs, peak_idx, trough_idx, recovery_idx=None, dates=None, title="Drawdown"):
-        """
-        drs: drawdown series (np.ndarray, pd.Series, or 1-col pd.DataFrame)
-        peak_idx, trough_idx, recovery_idx: positions (ints) or labels (e.g., datetimes)
-        dates: optional index to use when drs is an ndarray (must match len(drs))
-        """
-        try:
-            import pandas as pd
-        except Exception:
-            pd = None
-
-        # ---- normalize y and x (index) ----
-        if pd is not None and isinstance(drs, pd.DataFrame):
-            if drs.shape[1] != 1:
-                raise ValueError("drs DataFrame must have exactly one column")
-            y = drs.iloc[:, 0].to_numpy()
-            x = drs.index
-        elif pd is not None and isinstance(drs, pd.Series):
-            y = drs.to_numpy()
-            x = drs.index
-        else:
-            y = np.asarray(drs).reshape(-1)
-            if dates is not None and pd is not None and not isinstance(dates, np.ndarray):
-                x = pd.Index(dates)
-            else:
-                x = np.asarray(dates) if dates is not None else np.arange(len(y))
-
-        # ---- helper: convert a position/label to (x,y) ----
-        def get_point(idx_like):
-            if idx_like is None:
-                return None
-            # positional int
-            if isinstance(idx_like, (int, np.integer)):
-                i = int(idx_like)
-                if 0 <= i < len(y):
-                    return (x[i], y[i])
-                return None
-            # label -> locate in index (only if pandas index-like)
-            try:
-                i = x.get_loc(idx_like)  # works for pandas Index
-                if isinstance(i, slice):
-                    i = i.start
-                elif hasattr(i, "__len__"):
-                    i = int(np.asarray(i)[0])
-                return (x[i], y[i])
-            except Exception:
-                return None
-
-        # ---- plot ----
-        fig, ax = plt.subplots()
-        ax.plot(x, y, label="Drawdown")
-
-        p = get_point(peak_idx)
-        t = get_point(trough_idx)
-        r = get_point(recovery_idx)
-
-        if p is not None:
-            ax.scatter([p[0]], [p[1]], color="red", marker="o", zorder=3, label="Peak")
-        if t is not None:
-            # avoid duplicate legend label if peak & trough coincide
-            ax.scatter([t[0]], [t[1]], color="red", marker="o", zorder=3,
-                    label=None if p is not None else "Max DD")
-        if r is not None:
-            ax.scatter([r[0]], [r[1]], color="green", marker="o", zorder=3, label="Recovery")
-
-        ax.set_title(title)
-        ax.set_ylabel("Drawdown")
-        ax.legend(loc="best")
-        ax.grid(True, alpha=0.3)
-        plt.show()
 
     if plot:
-        is_df = isinstance(prices, pd.DataFrame)
-        if is_df:
-            plot_drawdown_with_markers(drs, peak_idx, trough_idx, recovery_idx, dates=prices.index)
-        else:
-            plot_drawdown_with_markers(drs, peak_idx, trough_idx, recovery_idx)
-    
-    return drs, [max_drawdown,peak_idx,trough_idx,recovery_idx]
-        
+        def _plot_drawdown_with_markers(drs, peak_idx, trough_idx, recovery_idx=None, title="Drawdown"):
+            y = np.asarray(drs).reshape(-1)
+            x = np.arange(len(y))
+
+            fig, ax = plt.subplots()
+            ax.plot(x, y, label="Drawdown")
+
+            if peak_idx is not None:
+                ax.scatter([x[peak_idx]], [y[peak_idx]], color="red", marker="o", zorder=3, label="Peak")
+            if trough_idx is not None:
+                ax.scatter([x[trough_idx]], [y[trough_idx]], color="red", marker="x", zorder=3, label="Trough")
+            if recovery_idx is not None:
+                ax.scatter([x[recovery_idx]], [y[recovery_idx]], color="green", marker="o", zorder=3, label="Recovery")
+
+            ax.set_title(title)
+            ax.set_ylabel("Drawdown")
+            ax.legend(loc="best")
+            ax.grid(True, alpha=0.3)
+            plt.show()
+        _plot_drawdown_with_markers(drs, peak_idx, trough_idx, recovery_idx)
+
+    return drs, [max_drawdown, peak_idx, trough_idx, recovery_idx]
+
+
+
+
 
     
 
@@ -269,60 +226,103 @@ def print_summary_statistics(dictionary):
 
 
 
+#COMPUTE SAMPLE VARCOV VIA PCs
+
+def compute_sample_varcov_via_PCs_model(returns,thresh = 0.95,uncorr_res = True, jitter=1e-12):
+    """Compute the sample variance via PCs model.
+    thresh set the number of k eigenvalues that expalin at list the threshold percentage of variance.
+    The aim is to de-noise the classical sample variance estimation."""
+    
+    ret = returns.values
+    sample_varcov = np.cov(ret,rowvar=False)
+    n = sample_varcov.shape[0]
+    
+    #COMPUTE FACTOR LOADING MATRIX (n X k)
+    
+    # symmetric eigendecomposition
+    evals, evecs = np.linalg.eigh(sample_varcov)
+    order = np.argsort(evals)[::-1]       # descending
+    evals = evals[order]
+    evecs = evecs[:, order]
+    
+    #Select k by explained variance ratio
+    tot = np.clip(evals.sum(), 1e-30, None)
+    cum = np.cumsum(evals) / tot
+    k = int(np.searchsorted(cum, float(thresh)))
+    k = min(max(1, k), n)
+    
+    evals = evals[:(k+1)]
+    evecs = evecs[:,:(k+1)]                 # (N, k)
+    
+    #Compute PCs, residuals and their variance
+    PCs = ret @ evecs
+    residuals = ret - PCs @ evecs.T
+    
+    varcov_pcs = np.diag(evals)         # (k, k)
+    
+    if uncorr_res:
+        varcov_res = np.diag(np.cov(residuals,rowvar=False))
+    else:
+        varcov_res = np.cov(residuals,rowvar=False)
+    
+    #Create the final variance
+    varcov = evecs @ varcov_pcs @ evecs.T + varcov_res + jitter * np.eye(n)
+    
+    # Ensure PSD numerically (clip tiny negatives)
+    varcov = 0.5 * (varcov + varcov.T)
+    w, V = np.linalg.eigh(varcov)
+    w = np.maximum(w, 0.0)
+    varcov = V @ (w[:, None] * V.T)
+    
+    return varcov
+    
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
 #COMPUTE EWMA
 
-def compute_ewma(returns):
+def compute_ewma_train_sample(returns,lamda=0.95,via_PCs=True):
     """Compute the covariance prediction for the assets in the Dataframe.
     Output is a np.ndarray"""
-    VARCOV = []
-    names = returns.columns
-    for n in names:
-        row = []
-        ret1 = returns[n]
-        for m in names:
-            ret2 = returns[m]
-            value = comp_single_ewma(ret1,ret2)
-            row.append(value)
-        VARCOV.append(row)
-    return np.array(VARCOV)
+    #Sample mean to initialize
+    returns = returns - returns.mean()      #demean
+    l = round(len(returns)* 0.4)
     
-            
-def comp_single_ewma(return1,return2,smooth = 0.97):
-    """Compute one step ahead forecast of cov for two returns TS."""
-    return1 = return1.values
-    return2 = return2.values
-    
-    cov_for = 0
-    for i in range(len(return1)):
-        new = return1[i]*return2[i]
-        cov_for = smooth * cov_for + (1-smooth) * new
-    return cov_for
-
-
-
-def update_ewma_step(varcov_0,ret_1,lamda=0.97):
-        """Update step of ewma."""
-        varcov_1 = []
-        l = len(ret_1)
-        new_obs = []
-        for i in range(l):
-            row = []
-            for j in range(l):
-                value_0 = ret_1.iloc[i]*ret_1.iloc[j]
-                row.append(value_0)
-            new_obs.append(row)
-            
-        new_obs = np.array(new_obs)
-        varcov_1 = varcov_0 * lamda + new_obs * (1 - lamda)
-        
-        return np.array(varcov_1)
+    if via_PCs:
+        sample_v = compute_sample_varcov_via_PCs_model(returns)
+    else:
+        sample_v = np.cov(returns.iloc[:l],rowvar=False)
     
     
-def update_ewma_in_test_sample(varcov_0,test_sample):
+    ret = returns.iloc[l:]
+    ret = ret.to_numpy()
+    
+    VARCOV = [sample_v]
+    for i in range(len(ret)):
+        r = ret[i]
+        varcovt_1 = VARCOV[-1] * lamda + np.outer(r,r) * (1-lamda)
+        VARCOV.append(varcovt_1)
+    return np.array(VARCOV[-1])
+    
+    
+    
+def update_ewma_in_test_sample(varcov_1,test_sample):
     """Output is a list of the varcov prediction for all the test horizon.
     It start with the varcov_0 given from train sample."""
-    varcov_test = [varcov_0]
-    for i in range(len(test_sample)):
+    #test_sample = test_sample - means
+    
+    varcov_test = [varcov_1]
+    for i in range(len(test_sample)-1):
         varcov = varcov_test[-1]
         ret = test_sample.iloc[i]
 
@@ -331,24 +331,49 @@ def update_ewma_in_test_sample(varcov_0,test_sample):
     
     return varcov_test
 
-   
-                
-def launch_portf_opt_on_sample_test(exp_ret,varcov_for,returns):
-    """Input: list of exp_ret and a list of varcov_forecast for each step.
-    Returns the portfolio returns under step by step optimization."""
+
+def update_ewma_step(varcov_1,ret_1,lamda=0.97):
+        """Update step of ewma."""
+        varcov_2 = varcov_1 * lamda + np.outer(ret_1,ret_1) * (1 - lamda)
+        
+        return np.array(varcov_2)
+
+ 
+ #GARCH
+ 
+ #FIT THE GARCH ON THE TRAINING SAMPLE
+ 
+def fit_garch11_train_sample(ret_train):
+    """Fit the Garch(1,1) model in the train sample dataframe. Returns a dictionary(keys=tickers) of dictionary(keys=omega,alpha,beta and v1 forecast.)"""
+    tickers = ret_train.tickers
     
-    portf_ret = []
-    for i in range(len(returns)):
-        m = exp_ret[i]
-        varcov = varcov_for[i]
-        ret = returns.iloc[i]
+    data = {}
+    for ticker in tickers: 
+        model = arch_model(ret_train[ticker], vol='GARCH',p=1,q=1, mean='Zero')
+        res = model.fit(disp="off")
+
+        #print(res.summary())
+        params = res.params
+        forecast = res.forecast(horizon=1)
+        v_1 = forecast.variance[-1:].values
+        #print(v_0)
+        data[ticker]={'omega':params['Omega'],'alpha':params['Alpha','beta':params['Beta'],'v1':v_1]}
+    
+    return data
+"""
+def update_garch_test_sample(data,ret_test):
+    Given the estimated parameters for Grach models it updates the varcov forecast.
+   """ 
         
-        res = portf_optim(m,varcov)
-        w = res['weights']
-        portf_return = ret @ w
-        portf_ret.append(portf_return)
-        
-    return np.array(portf_ret)
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   
+   
         
         
 
@@ -436,13 +461,117 @@ def portf_optim(ex_values,varcov,type='Both',value=1,long_only=True, thres_weig=
     
     #SOLVE THE PROBLE
     prob.solve(verbose=verbose)
-    print(f'Status: {prob.status}')
+    #print(f'Status: {prob.status}')
     
     return {
         "status": prob.status,
         "objective": prob.value,
         "weights": None if w.value is None else np.asarray(w.value).ravel(),
     }
+
+
+             
+def launch_portf_opt_on_sample_test(exp_ret,varcov_for,returns,type='Both',value=1):
+    """Input: list of exp_ret and a list of varcov_forecast for each step.
+    Returns the portfolio returns under step by step optimization."""
+    
+    portf_ret = []
+    for i in range(len(returns)):
+        m = exp_ret[i]
+        varcov = varcov_for[i]
+        ret = returns.iloc[i]
+        
+        res = portf_optim(m,varcov,type,value)
+        w = res['weights']
+        portf_return = ret @ w
+        portf_ret.append(portf_return)
+        
+    return np.array(portf_ret)
+
+
+
+def risk_parity_portf(varcov,long_only=True, solver="SCS", eps=1e-8):
+    """Compute the weights vector to have a risk parity portfolio."""
+    n = varcov.shape[0]
+    
+    #Check for PSD-veness of varcov
+    def psd_jitter(S, eps=1e-8):
+        S = np.asarray(S, dtype=float)
+        S = 0.5 * (S + S.T)                     # symmetrize first
+        w, V = np.linalg.eigh(S)                # real symmetric eigendecomp
+        w = np.maximum(w, eps)                  # clip small/neg eigenvalues
+        S_psd = V @ np.diag(w) @ V.T
+        S_psd = 0.5 * (S_psd + S_psd.T)         # enforce symmetry again
+        return S_psd
+    
+    varcov = psd_jitter(varcov)
+    assert np.allclose(varcov, varcov.T, atol=1e-12)
+    
+    
+    """Theorical Implementation (BUT NOT CONVEX)
+    n = cov.shape[0]
+    w = cp.Variable(n)
+
+    # portfolio variance
+    sigma_p = cp.sqrt(cp.quad_form(w, cov))
+
+    # marginal risk contributions
+    mrc = cov @ w / sigma_p
+
+    # risk contributions
+    rc = cp.multiply(w, mrc)
+    rc = rc / cp.sum(rc)
+
+    # objective: minimize squared deviation from equal risk
+    objective = cp.Minimize(cp.sum_squares(rc - 1/n))
+
+    constraints = [cp.sum(w) == 1, w >= 0]"""
+    
+    #ALTERNATIVE EQUIVALENT OPTIMIZATION PROBLEM
+    
+    #PARAMETERS
+    varcov = cp.Parameter(shape=(n,n),PSD=True, value = varcov, name ='varcov')
+    
+    w = cp.Variable(n)
+
+    # Constraint: portfolio variance normalized to 1
+    constraints = [cp.quad_form(w, varcov) <= 1,
+                   w >= eps]
+
+    # Objective: maximize sum of log(w) == minimize -sum log(w)
+    obj = cp.Maximize(cp.sum(cp.log(w)))
+
+    prob = cp.Problem(obj,constraints)
+    prob.solve(solver=solver)
+    
+    #print(f'Status: {prob.status}')
+    
+    return {
+        "status": prob.status,
+        "objective": prob.value,
+        "weights": None if w.value is None else np.asarray(w.value / np.sum(w.value)).ravel(),
+    }
+    
+    
+
+def launch_risk_parity_opt_on_sample_test(varcov_for,returns,long_only=True):
+    """Input: list of exp_ret and a list of varcov_forecast for each step.
+    Returns the portfolio returns under step by step optimization."""
+    
+    portf_ret = []
+    for i in range(len(returns)):
+        varcov = varcov_for[i]
+        ret = returns.iloc[i]
+        
+        res = risk_parity_portf(varcov,long_only)
+        w = res['weights']
+        portf_return = ret @ w
+        portf_ret.append(portf_return)
+        
+    return np.array(portf_ret)
+
+
+
 
 
 
@@ -463,6 +592,7 @@ def portf_optim(ex_values,varcov,type='Both',value=1,long_only=True, thres_weig=
 def trade_up_down(p,ret,transaction_costs=0.0020,up_thresh=0.6,low_thresh=0.4,plot=None):
     """Given an array of probabilities of up, it gives you the trading signals."""
     #SET TRADING STRATEGY
+    
 
     signals = np.zeros_like(p, dtype=int)  # default 0
     signals[p > up_thresh] = 1
@@ -472,12 +602,12 @@ def trade_up_down(p,ret,transaction_costs=0.0020,up_thresh=0.6,low_thresh=0.4,pl
     #transaction_costs = 0.002
     values[values!=0] -= transaction_costs 
 
-    trading_ret = pd.DataFrame(values, index= data.index,columns=['Ret'])
+    trading_ret = pd.DataFrame(values, index= ret.index,columns=['Ret'])
     prices = compute_prices_paths(trading_ret)
 
     if plot is not None:
         fig, ax = plt.subplots()
-        ax.plot(data.index,prices)
+        ax.plot(ret.index,prices)
         plt.show()
     return signals,trading_ret,prices
 
